@@ -1,16 +1,17 @@
 from flask import Flask, request, jsonify
 from docx import Document
-import base64, tempfile, os
+import base64
+import io
 
 app = Flask(__name__)
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def home():
     return jsonify({
         "status": "online",
-        "message": "DOCX Metadata Extraction API",
-        "endpoint": "/extract_metadata",
         "method": "POST",
+        "endpoint": "/extract_metadata",
+        "message": "DOCX Metadata Extraction API",
         "body_format": {"file": "base64_encoded_docx_data"}
     })
 
@@ -18,30 +19,28 @@ def home():
 def extract_metadata():
     try:
         data = request.get_json()
-        if not data or 'file' not in data:
-            return jsonify({"error": "No file data received"}), 400
+        if not data or "file" not in data:
+            return jsonify({"error": "Missing 'file' key"}), 400
 
-        binary = base64.b64decode(data['file'])
-        temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".docx").name
+        # Decode base64 to bytes
+        file_bytes = base64.b64decode(data["file"])
+        doc = Document(io.BytesIO(file_bytes))
 
-        with open(temp_path, "wb") as f:
-            f.write(binary)
+        # Extract metadata
+        properties = doc.core_properties
+        metadata = {
+            "author": properties.author,
+            "last_modified_by": properties.last_modified_by,
+            "title": properties.title,
+            "subject": properties.subject,
+            "category": properties.category,
+            "comments": properties.comments
+        }
 
-        try:
-            doc = Document(temp_path)
-            props = doc.core_properties
-            author = props.author or "Unknown"
-            last_mod = props.last_modified_by or "Unknown"
-            return jsonify({"Author": author, "LastSavedBy": last_mod})
-        except Exception:
-            return jsonify({"error": "Invalid DOCX file"}), 400
-        finally:
-            os.remove(temp_path)
-
+        return jsonify(metadata)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 400
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-
+    app.run(host='0.0.0.0', port=10000)
